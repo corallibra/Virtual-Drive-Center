@@ -1,47 +1,157 @@
-# Architecture
+# Virtual Drive Center — 架构说明
 
-## Why host mount namespace?
+作者：Michael
 
-A normal Docker mount is isolated in the container mount namespace. For this project the desired behavior is different: after mounting an IMG/ISO, DSM File Station should see the mount at a real `/volume1/...` path.
+## 1. 核心目标
 
-The project therefore uses:
+项目需要同时满足两个条件：
+
+1. Web 可以管理 ISO / IMG。
+2. 挂载结果必须出现在 Synology NAS 的真实文件系统中，以便 DSM File Station 继续访问。
+
+## 2. 为什么普通 Docker mount 不足够
+
+如果只在容器内部执行：
 
 ```text
+mount image.img /mnt/image
+```
+
+挂载只属于该容器的 mount namespace，DSM 宿主机未必能够看到。
+
+本项目因此采用：
+
+```text
+Container
+   ↓
+pid: host
+   ↓
+nsenter -t 1 -m
+   ↓
+Host mount namespace
+```
+
+## 3. 核心权限
+
+```yaml
 privileged: true
 pid: host
 ```
 
-and invokes host commands through:
+这是当前实现的必要条件之一。
+
+## 4. 挂载流程
+
+### ISO
 
 ```text
-nsenter -t 1 -m -- <command>
+ISO
+ ↓
+宿主机 namespace
+ ↓
+loop / filesystem
+ ↓
+RO mount
+ ↓
+/volume1/docker/virtual-drive/mounts/<id>
 ```
 
-This avoids requiring `/volume1` itself to be a shared mount. In particular, the project does **not** require `:rshared` on the main `/volume1` bind mount.
+### IMG 整盘文件系统
 
-## Data paths
+```text
+IMG
+ ↓
+识别文件系统
+ ↓
+loop mount
+ ↓
+挂载
+```
 
-Application data is bind-mounted at `PROJECT_ROOT`.
+### 分区 IMG
 
-The NAS image picker accepts host-style paths under `NAS_ROOT`. The backend validates paths and executes NAS filesystem operations through the host mount namespace.
+```text
+IMG
+ ↓
+MBR/GPT
+ ↓
+loop --partscan
+ ↓
+/dev/loopNp1 / p2 / p3 ...
+ ↓
+blkid
+ ↓
+用户选择分区
+ ↓
+mount
+```
 
-## Image inspection
+## 5. NAS 文件选择器
 
-For IMG files the inspection order is:
+NAS 文件选择并不依赖浏览器本地文件选择器。
 
-1. Probe the whole image for a filesystem signature.
-2. If no whole-image filesystem is found, attach a read-only loop device with partition scanning.
-3. Prefer `/sys/class/block/loopNpX` on Synology where possible.
-4. Fall back to `sfdisk` partition information.
-5. Probe partition filesystems using `blkid` or temporary offset loops.
+```text
+Browser
+ ↓
+/api/nas/browse
+ ↓
+宿主机 namespace
+ ↓
+/volume1
+ ↓
+返回目录与文件
+```
 
-## Mounting
+电脑上传则是另一条流程：
 
-- ISO: read-only loop mount.
-- Whole-image IMG: mount the image as a filesystem if a supported filesystem is detected.
-- Partitioned IMG: mount the selected partition device or a temporary offset loop when required.
-- NTFS RW: try `ntfs3`, then fall back to `ntfs-3g`.
+```text
+Browser local file
+ ↓
+HTTP upload
+ ↓
+images/
+ ↓
+Image Library
+```
 
-## Important security boundary
+## 6. 为什么不使用 rshared
 
-Because host namespace and block-device operations are required, the container is intentionally privileged. This is a deliberate trade-off for DSM File Station integration and should be treated as a host-administration service, not as an untrusted multi-tenant web app.
+Synology 某些安装环境下：
+
+```text
+/volume1
+```
+
+并不是 Docker 所要求的 shared mount。使用：
+
+```text
+:rshared
+```
+
+可能导致容器创建失败。
+
+因此项目不把 mount propagation 作为部署前提，而是把真正的 mount 动作放到宿主机 mount namespace。
+
+## 7. File Station
+
+成功挂载后，挂载目录位于真实 NAS 路径：
+
+```text
+/volume1/docker/virtual-drive/mounts/<mount-id>
+```
+
+于是 DSM File Station 可以直接定位该目录。
+
+## 8. 重要限制
+
+实际文件系统支持取决于：
+
+- Synology DSM 内核
+- CPU 架构
+- 基础镜像
+- `mount` 工具
+- 文件系统辅助工具
+- IMG 本身是否完整
+- 文件系统是否损坏或加密
+
+因此“支持的文件系统”应该理解为“当前 NAS 环境能够实际完成 mount 的文件系统”。

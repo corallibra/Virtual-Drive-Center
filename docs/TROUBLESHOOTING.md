@@ -1,119 +1,161 @@
-# 故障排查
+# Virtual Drive Center — 故障排查
 
-## 1. Web 页面无法访问
+作者：Michael
 
-检查：
+## 1. 容器无法启动：not a shared mount
 
-```bash
-docker ps --filter name=virtual-drive
-```
-
-查看日志：
-
-```bash
-docker logs --tail 200 virtual-drive
-```
-
-确认浏览器访问：
+错误：
 
 ```text
-http://<NAS-IP>:<EXTERNAL_PORT>
+path /volume1/docker/virtual-drive is mounted on /volume1 but it is not a shared mount
 ```
 
-## 2. NAS 选择器看不到文件
+处理：
 
-进入容器终端后，先验证宿主机 namespace：
+- 检查 Compose 是否有 `:rshared`。
+- 当前方案不要使用 `rshared`。
+- 使用普通 `rw` bind mount，并依靠 host mount namespace 执行挂载。
+
+## 2. NAS 浏览为空
+
+容器内测试：
 
 ```bash
 nsenter -t 1 -m -- ls -la /volume1
-nsenter -t 1 -m -- ls -la /volume1/your-share/Downloads
 ```
 
-如果这里能看到文件，说明 host namespace 路径正常；继续查看 Web API 日志。
+然后：
 
-确认 `.env`：
-
-```dotenv
-NAS_ROOT=/volume1
-NAS_IMPORT_ROOT=/volume1/your-share/Downloads
+```bash
+nsenter -t 1 -m -- ls -la /volume1/homes
 ```
 
-## 3. 不要使用 `:rshared`
+以及实际默认目录：
 
-本项目不要求：
-
-```yaml
-- /volume1/...:/volume1/...:rshared
+```bash
+nsenter -t 1 -m -- ls -la /volume1/homes/<user>/Downloads
 ```
 
-在某些 Synology 环境中会导致：
+如果这里可以看到文件，而 Web 不能显示，优先检查 NAS 浏览 API 和应用日志。
+
+## 3. `docker` 不存在
+
+如果终端提示：
 
 ```text
-path ... is mounted on /volume1 but it is not a shared mount
+docker: command not found
 ```
 
-## 4. IMG 被识别为未知
+而提示符类似：
 
-对目标 IMG 执行：
-
-```bash
-nsenter -t 1 -m -- file -sL /path/to/image.img
-nsenter -t 1 -m -- blkid -p -o full /path/to/image.img
-nsenter -t 1 -m -- sfdisk -J /path/to/image.img
+```text
+root@container:/opt/virtual-drive#
 ```
 
-然后测试 loop/partition：
+说明你已经在容器中，不需要从容器里运行 `docker exec`。
+
+## 4. `lsblk` 不存在
+
+`nsenter` 只改变 namespace，不会自动让容器获得宿主机命令文件。
+
+检查：
 
 ```bash
-nsenter -t 1 -m -- losetup --find --show --partscan --read-only /path/to/image.img
+which lsblk
+```
+
+或者：
+
+```bash
+ls -la /proc/1/root/usr/bin/lsblk
+```
+
+如果不存在，可使用 `/sys/class/block` 和 `blkid` 做分区状态诊断。
+
+## 5. 检查 IMG
+
+```bash
+nsenter -t 1 -m -- file -sL /volume1/path/to/test.img
+```
+
+```bash
+nsenter -t 1 -m -- blkid -p -o full /volume1/path/to/test.img
+```
+
+```bash
+nsenter -t 1 -m -- sfdisk -J /volume1/path/to/test.img
+```
+
+## 6. 建立 loop
+
+```bash
+nsenter -t 1 -m -- losetup --find --show --partscan --read-only /volume1/path/to/test.img
+```
+
+如果返回：
+
+```text
+/dev/loop1
 ```
 
 检查：
 
 ```bash
-ls -la /sys/class/block/loopNp*
+nsenter -t 1 -m -- sh -c 'ls -la /dev/loop1*'
 ```
 
-以及：
+## 7. 查看 filesystem
 
 ```bash
-nsenter -t 1 -m -- blkid /dev/loopNp1
+nsenter -t 1 -m -- sh -c 'for x in /dev/loop1 /dev/loop1p*; do [ -e "$x" ] || continue; echo "=== $x ==="; blkid "$x" 2>&1 || true; done'
 ```
 
-## 5. `lsblk` 在容器中不可执行
+## 8. mount exit status 32
 
-这在部分 Synology + `nsenter` 场景中并不一定意味着 loop 分区不存在。项目优先读取：
+不要仅凭 `32` 判断原因。获取实际 stderr。
 
-```text
-/sys/class/block
-```
+常见方向：
 
-并使用 `blkid` 探测分区。
-
-## 6. mount 返回 exit status 32
-
-不要只看退出码，查看应用返回的完整 `mount` stderr。常见原因包括：
-
-- 把整块分区镜像误当作文件系统挂载
-- 文件系统不受支持
-- NTFS dirty/incomplete shutdown
+- 错误的设备节点
+- 错误的文件系统类型
 - 文件系统损坏
-- 缺少相应用户态 helper
-- IMG 分区设备选择错误
+- 缺少 filesystem helper
+- 权限问题
+- IMG 并不是普通可挂载格式
 
-## 7. Docker/Container Manager 更新后仍是旧版本
+## 9. SQLite binding error
 
-确认镜像重新构建，而不是仅重启旧容器。建议：
-
-```bash
-docker compose build --no-cache virtual-drive
-docker compose up -d --force-recreate
-```
-
-然后访问：
+例如：
 
 ```text
-/api/version
+Incorrect number of bindings supplied.
+The current statement uses 4, and there are 5 supplied.
 ```
 
-应返回当前 `APP_VERSION`。
+这是 SQL 占位符与参数数量不一致。重点检查挂载状态更新 SQL。
+
+## 10. 页面卡在“正在读取映像库”
+
+检查：
+
+1. 浏览器 Console 是否有 JavaScript 异常。
+2. API 是否返回错误。
+3. 容器日志是否正常。
+4. 页面版本号是否与当前构建一致。
+5. 是否是浏览器缓存。
+
+## 11. 版本号未变化
+
+重新 Build：
+
+```bash
+docker compose build --no-cache
+```
+
+然后：
+
+```bash
+docker compose up -d
+```
+
+浏览器执行强制刷新，并检查 HTML、JS/CSS 版本参数。
