@@ -18,3 +18,6 @@
 ## Earlier 2.0.x milestones
 
 The 2.0 series progressively added NAS-side image selection, host mount namespace integration, multi-partition IMG handling, checksum jobs, mount history, usage display, and the web file manager.
+
+### Documentation
+- Added sanitized UI screenshots under `docs/images/` and linked them from `README.md`.
