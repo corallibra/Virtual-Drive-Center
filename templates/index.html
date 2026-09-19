@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ISO / IMG 磁盘挂载工具 · Synology</title>
+<link rel="stylesheet" href="/static/app.css?v=2.0.13"><script defer src="/static/app.js?v=2.0.13"></script>
+</head>
+<body>
+<div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+<header class="topbar"><div class="brand"><div class="brandmark">VD</div><div><div class="brand-title">Virtual Drive <span>2.0.13</span></div><div class="brand-sub">Synology NAS 虚拟磁盘中心</div></div></div><div class="top-actions"><button class="icon-button" onclick="openHistory()">⌁ <span>历史</span></button><button class="icon-button" onclick="refreshAll()">↻ <span>刷新</span></button><button class="upload-button" onclick="openImport()"><span>＋</span> 导入映像</button></div></header>
+<input id="uploadInput" type="file" multiple accept=".iso,.img,.ima,.raw,.bin" hidden><main class="shell">
+<section class="welcome"><div class="hero-copy"><div class="kicker">VIRTUAL DISK TOOL · 2.0.13</div><h1>ISO / IMG <span>磁盘挂载工具</span></h1><p>从 NAS 目录直接选择镜像，挂载后立即获得真实 NAS 文件系统路径；支持多分区 IMG、读写模式、SHA-256 校验与 DSM File Station 访问。</p><div class="hero-actions"><button class="hero-primary" onclick="openImport()"><span>＋</span> 导入映像</button><button class="hero-secondary" onclick="document.getElementById('mountSection').scrollIntoView({behavior:'smooth'})">查看活动挂载</button></div><div class="hero-hint"><span class="pulse-dot"></span><b>NAS 默认目录</b><code id="defaultNasRoot">/volume1</code></div></div><div class="hero-visual"><div class="hero-grid"></div><div class="disk-orbit orbit-1"></div><div class="disk-orbit orbit-2"></div><div class="disk-orbit orbit-3"></div><div class="disk-ring"><div class="disk-core"><span class="core-glyph">VD</span><i></i></div></div><div class="scan-line"></div><div class="hero-caption"><span>HOST MOUNT</span><strong>DSM File Station</strong></div></div></section>
+<section class="metrics" id="metrics"><div class="metric"><span>映像总数</span><strong id="mImages">{{ stats.images }}</strong><small>ISO / IMG</small></div><div class="metric"><span>当前挂载</span><strong id="mMounted">{{ stats.mounted }}</strong><small>实时挂载</small></div><div class="metric"><span>ISO</span><strong id="mIso">{{ stats.iso }}</strong><small>只读光盘</small></div><div class="metric"><span>IMG</span><strong id="mImg">{{ stats.img }}</strong><small>可读写镜像</small></div><div class="metric storage"><div class="metric-head"><span>NAS 存储</span><b id="storageText">—</b></div><div class="progress"><i id="storageBar"></i></div><small id="storageFree">—</small></div></section>
+<section class="workspace">
+<div class="section-title"><div><div class="kicker">IMAGE LIBRARY</div><h2>映像库</h2><div id="libraryStatus" class="library-status"><span class="status-dot busy"></span>正在连接</div></div><div class="view-tools"><button class="filter active" data-filter="all">全部</button><button class="filter" data-filter="iso">ISO</button><button class="filter" data-filter="img">IMG</button></div></div>
+<div id="imageGrid" class="image-grid"><div class="loading-card"><div class="loading-spinner"></div><div><strong>正在读取映像库…</strong><span>正在连接数据库，不会读取 1TB IMG 的完整内容。</span></div><div class="loading-progress"><i></i></div></div></div>
+</section>
+<section id="mountSection" class="workspace active-area"><div class="section-title"><div><div class="kicker">ACTIVE MOUNTS</div><h2>当前挂载</h2></div><div class="hint">挂载目录同时存在于 DSM File Station</div></div><div id="mountGrid" class="mount-grid"><div class="loading">正在读取挂载状态…</div></div></section>
+</main>
+<div id="modal" class="modal hidden"><div class="modal-card" id="modalCard"></div></div><div id="toast" class="toast"></div>
+</body></html>

@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  static-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r app/requirements.txt
+      - name: Compile Python
+        run: python -m compileall -q app
+      - name: Check repository for local-only markers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          forbidden = ["bg" + "0axe", "10.0." + "10.10", "admin" + "@", "1tbsd" + ".img"]
+          for p in Path('.').rglob('*'):
+              if p.is_file() and '.git' not in p.parts:
+                  try:
+                      text = p.read_text(errors='ignore')
+                  except Exception:
+                      continue
+                  for value in forbidden:
+                      if value in text:
+                          raise SystemExit(f"forbidden local-only value found in {p}")
+          print('privacy scan passed')
+          PY

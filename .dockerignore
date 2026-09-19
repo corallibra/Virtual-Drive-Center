@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+*.zip
+*.tar.gz
+README*
+CHANGELOG.md
+CONTRIBUTING.md
+SECURITY.md
+LICENSE
+CODE_OF_CONDUCT.md
+docs/

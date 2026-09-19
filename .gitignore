@@ -1,0 +1,24 @@
+# Local environment / secrets
+.env
+.env.local
+*.secret
+
+# Runtime data
+_data/
+data/
+*.db
+*.db-shm
+*.db-wal
+admin-password.txt
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+
+# Build/release artifacts
+*.zip
+*.tar.gz

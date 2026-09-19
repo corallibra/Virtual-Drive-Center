@@ -1,0 +1,45 @@
+services:
+  virtual-drive:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: virtual-drive
+    restart: unless-stopped
+
+    # Required for host mount namespace access and mount/loop operations.
+    privileged: true
+    pid: host
+
+    environment:
+      TZ: ${TZ:-Asia/Tokyo}
+      HOST_ROOT: ${PROJECT_ROOT:-/volume1/docker/virtual-drive}
+      IMAGES_DIR: ${PROJECT_ROOT:-/volume1/docker/virtual-drive}/images
+      MOUNTS_DIR: ${PROJECT_ROOT:-/volume1/docker/virtual-drive}/mounts
+      DATA_DIR: ${PROJECT_ROOT:-/volume1/docker/virtual-drive}/data
+      EXPORT_DIR: ${PROJECT_ROOT:-/volume1/docker/virtual-drive}/export
+      NAS_ROOT: ${NAS_ROOT:-/volume1}
+      HOST_FS_VIEW: /proc/1/root
+      PORT: "8099"
+      AUTO_RESTORE: ${AUTO_RESTORE:-true}
+      VD_USER: ${VD_USER:-admin}
+      VD_PASSWORD: ${VD_PASSWORD:-}
+      APP_VERSION: ${APP_VERSION:-2.0.13}
+      NAS_IMPORT_ROOT: ${NAS_IMPORT_ROOT:-/volume1}
+
+    ports:
+      - "${EXTERNAL_PORT:-9109}:8099"
+
+    volumes:
+      - ${PROJECT_ROOT:-/volume1/docker/virtual-drive}:${PROJECT_ROOT:-/volume1/docker/virtual-drive}:rw
+      - /etc/localtime:/etc/localtime:ro
+
+    security_opt:
+      - apparmor=unconfined
+
+    networks:
+      - virtual-drive
+
+networks:
+  virtual-drive:
+    name: virtual-drive
+    driver: bridge
